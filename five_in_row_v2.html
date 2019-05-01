@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>Game: Five In a Row</title>
+    <style type="text/css">
+        #canvas {
+            background-image: url(background.png);
+            background-size:     cover;                      
+            background-repeat:   no-repeat;
+            background-position: center center;
+        }
+    </style>
+    <script type="text/javascript" src="https://cdn.bootcss.com/socket.io/1.7.4/socket.io.min.js"></script>
+    <script type="text/javascript">
+        
+        var socket = io.connect('http://127.0.0.1:5000');
+
+        var playerColor = 0;
+        var canvas;
+        var context;
+        var winStatus = false;
+
+        //stone image
+        var imageBlack = new Image();
+        imageBlack.src = "Black.png";
+        var imageWhite = new Image();
+        imageWhite.src = "White.png";
+ 
+        //Checkerboard is a 2-D Array
+        var chessArray = new Array(19);
+        for (var x = 0; x < 19; x++) {
+            chessArray[x] = new Array(19);
+            for (var y = 0; y < 19; y++) {
+                chessArray[x][y] = 0;
+            }
+        }
+
+        //initialize
+        function drawRect() {
+            canvas = document.getElementById("canvas");
+            context = canvas.getContext("2d");
+ 
+            for (var i = 0; i <= 800; i += 40) {
+                context.beginPath();
+                context.moveTo(0, i);
+                context.lineTo(800, i);
+                context.closePath();
+                context.stroke();
+ 
+                context.beginPath();
+                context.moveTo(i, 0);
+                context.lineTo(i, 800);
+                context.closePath();
+                context.stroke();
+            }
+        }
+
+        function play(e) {
+
+            var scrollX = document.documentElement.scrollLeft || document.body.scrollLeft;
+            var scrollY = document.documentElement.scrollTop || document.body.scrollTop;
+
+            var xRelative = e.pageX || e.clientX + scrollX
+            var yRelative = e.pageY || e.clientY + scrollY
+
+            var x = parseInt((xRelative - 40) / 40);
+            var y = parseInt((yRelative - 150) / 40);
+
+            socket.emit('place stone', { chessColor: playerColor, x: x, y:y });
+        }
+
+        socket.emit('assign color', {color: playerColor});
+        socket.once('color res', function (color) {
+            playerColor = color
+
+            var player_color = document.querySelector("#player_color");
+            if (playerColor == 1){
+                player_color.setAttribute("src", "White.png")
+            }
+            else if (playerColor == 2){
+                player_color.setAttribute("src", "Black.png")
+            }
+        });
+
+        socket.on('redirect', function (data) {
+            if (playerColor == 0)
+                window.location = data.url;
+        });
+
+        socket.on('wait player to join', function(){
+            alert('Please wait another player to join.');
+        });
+
+        socket.on('draw stone', function (data) {
+            drawStone(data.chessColor, data.x, data.y);
+
+            var turn = document.querySelector("#turn");
+
+            if (data.chessColor == playerColor) {
+                turn.innerText = "Opponent's turn"
+            }
+            else {
+                turn.innerText = "Your turn"
+            }
+        });
+        
+        socket.on('wrong turn', function(color){
+            if (playerColor == color)
+                alert('Not your turn. Please wait.');
+        });
+
+        socket.on('wrong place', function(color){
+            if (playerColor == color)
+                alert('Invalid location. Please choose another place.');
+        });
+
+        socket.once('winning res', function (color){
+            setTimeout(nextGameAsking(color), 500);
+        });
+
+        socket.on('finished', function (color) {
+            if (playerColor == color){
+                if (confirm('Are you sure you are going to the next game?')) {
+                    socket.emit('clean checkerboard');
+                    socket.on('cleaned', function(){
+                        location.reload();
+                    }) 
+                }
+                else {
+                    // Do nothing!
+                }
+            }      
+        });
+
+        function drawStone(color, x, y) {
+            if (x >= 0 && x < 19 && y >= 0 && y < 19) {//server 
+                if (color == 1) {
+                    context.drawImage(imageWhite, x * 40 + 22, y * 40 + 22);
+                    chessArray[x][y] = 1;
+                }
+                else {
+                    context.drawImage(imageBlack, x * 40 + 22, y * 40 + 22);
+                    chessArray[x][y] = 2;
+                }
+            }
+        }
+
+        function nextGameAsking(color){
+            var turn = document.querySelector("#turn");
+            if (playerColor == color){
+                turn.innerText = "You win! Congratulations!"
+            }
+            else{
+                turn.innerText = "Unfortunately. You lose. Try again!"
+            }
+
+            if (color == 1){
+                var winner = "White";
+            }
+            else{
+                var winner = "Black";
+            }
+            if (confirm(winner + ' is the winner! Are you sure you are going to the next game?')) {
+                (function(i){socket.emit('clean checkerboard')});
+                location.reload();
+            }
+            else {
+                // Do nothing!
+            }
+        }
+
+    </script>
+</head>
+<body onload="drawRect()">
+    <h1 align="center">Welcome to Super Five in a Row</h1>
+    <hr>
+    <h2 id="turn" style="display: inline">White Turn</h2>
+    <div>
+        <canvas id="canvas" onmousedown="play(event)" width="800" height="800"></canvas>
+        <h4>Your Color is: <img id="player_color" src=""/></h4>
+    </div>
+    <h3>Yingzhe Zhang</h3>
+ 
+</body>
+</html>
